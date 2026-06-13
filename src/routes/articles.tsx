@@ -21,7 +21,7 @@ function Articles() {
         <p className="text-muted-foreground mt-2">Curated guides for healthier eating and conscious sharing.</p>
       </div>
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {data.map((a) => (
+        {data.map((a: any) => (
           <Link key={a.id} to="/articles/$slug" params={{ slug: a.slug }}>
             <Card className="overflow-hidden h-full shadow-soft hover:shadow-warm transition-shadow">
               {a.cover_image_url && <img src={a.cover_image_url} alt={a.title} className="w-full h-48 object-cover" loading="lazy" />}
