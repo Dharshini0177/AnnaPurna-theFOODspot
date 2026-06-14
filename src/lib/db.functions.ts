@@ -82,10 +82,32 @@ export const createDonation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => DonationSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const { error, data: row } = await context.supabase.from("donations")
-      .insert({ ...data, donor_id: context.userId }).select().single();
-    if (error) throw error;
-    return row;
+    try {
+      if (!context.userId) throw new Error("Unauthenticated");
+
+      // Ensure caller has the donor role (RLS requires donor/ngo/admin).
+      const { data: roles } = await context.supabase
+        .from("user_roles").select("role").eq("user_id", context.userId);
+      const has = (r: string) => (roles ?? []).some((x) => x.role === r);
+      if (!has("donor") && !has("ngo") && !has("admin")) {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { error: rErr } = await supabaseAdmin.from("user_roles")
+          .insert({ user_id: context.userId, role: "donor" });
+        if (rErr && !rErr.message.includes("duplicate")) throw rErr;
+      }
+
+      const payload = { ...data, donor_id: context.userId, status: "available" as const };
+      const { error, data: row } = await context.supabase.from("donations")
+        .insert(payload).select().single();
+      if (error) {
+        console.error("[createDonation] insert failed", { userId: context.userId, payload, error });
+        throw error;
+      }
+      return row;
+    } catch (e) {
+      console.error("[createDonation] handler exception", e);
+      throw e;
+    }
   });
 
 export const updateDonationStatus = createServerFn({ method: "POST" })
