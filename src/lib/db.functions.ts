@@ -157,9 +157,18 @@ export const createRequest = createServerFn({ method: "POST" })
     delivery_address: z.string().trim().min(1).max(500),
   }).parse(d))
   .handler(async ({ data, context }) => {
+    const { data: roles } = await context.supabase
+      .from("user_roles").select("role").eq("user_id", context.userId);
+    const has = (r: string) => (roles ?? []).some((x) => x.role === r);
+    if (!has("beneficiary") && !has("ngo") && !has("admin") && !has("volunteer")) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { error: rErr } = await supabaseAdmin.from("user_roles")
+        .insert({ user_id: context.userId, role: "beneficiary" });
+      if (rErr && !rErr.message.includes("duplicate")) throw rErr;
+    }
     const { error, data: row } = await context.supabase.from("food_requests")
       .insert({ ...data, beneficiary_id: context.userId }).select().single();
-    if (error) throw error;
+    if (error) { console.error("[createRequest]", error); throw error; }
     return row;
   });
 
