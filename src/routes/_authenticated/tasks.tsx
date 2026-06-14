@@ -25,7 +25,13 @@ function Tasks() {
   });
   const upd = useMutation({
     mutationFn: (v: { id: string; status: any }) => updFn({ data: v }),
-    onSuccess: () => { toast.success("Status updated"); qc.invalidateQueries({ queryKey: ["tasks"] }); },
+    onSuccess: () => {
+      toast.success("Status updated");
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["donations"] });
+      qc.invalidateQueries({ queryKey: ["my-requests"] });
+      qc.invalidateQueries({ queryKey: ["incoming-requests"] });
+    },
   });
 
   return (
