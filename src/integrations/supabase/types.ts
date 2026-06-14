@@ -90,6 +90,7 @@ export type Database = {
         Row: {
           beneficiary_id: string
           created_at: string
+          delivery_address: string | null
           donation_id: string
           id: string
           message: string | null
@@ -100,6 +101,7 @@ export type Database = {
         Insert: {
           beneficiary_id: string
           created_at?: string
+          delivery_address?: string | null
           donation_id: string
           id?: string
           message?: string | null
@@ -110,6 +112,7 @@ export type Database = {
         Update: {
           beneficiary_id?: string
           created_at?: string
+          delivery_address?: string | null
           donation_id?: string
           id?: string
           message?: string | null
