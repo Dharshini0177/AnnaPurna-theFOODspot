@@ -45,9 +45,10 @@ function DonationCard({ d }: { d: any }) {
   const [open, setOpen] = useState(false);
   const [servings, setServings] = useState(1);
   const [message, setMessage] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
   const reqFn = useServerFn(createRequest);
   const m = useMutation({
-    mutationFn: () => reqFn({ data: { donation_id: d.id, servings_requested: servings, message } }),
+    mutationFn: () => reqFn({ data: { donation_id: d.id, servings_requested: servings, message, delivery_address: deliveryAddress } }),
     onSuccess: () => { toast.success("Request submitted"); setOpen(false); },
     onError: (e: any) => toast.error(e.message),
   });
@@ -77,8 +78,9 @@ function DonationCard({ d }: { d: any }) {
               <DialogHeader><DialogTitle>Request {d.food_name}</DialogTitle></DialogHeader>
               <div className="space-y-3">
                 <div><Label>Servings needed</Label><Input type="number" min={1} value={servings} onChange={(e) => setServings(+e.target.value)} /></div>
+                <div><Label>Delivery address</Label><Textarea required maxLength={500} placeholder="Where should the food be delivered?" value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} /></div>
                 <div><Label>Message (optional)</Label><Textarea maxLength={500} value={message} onChange={(e) => setMessage(e.target.value)} /></div>
-                <Button onClick={() => m.mutate()} disabled={m.isPending} className="w-full bg-primary text-primary-foreground">
+                <Button onClick={() => m.mutate()} disabled={m.isPending || !deliveryAddress.trim()} className="w-full bg-primary text-primary-foreground">
                   {m.isPending ? "Submitting…" : "Submit request"}
                 </Button>
               </div>
