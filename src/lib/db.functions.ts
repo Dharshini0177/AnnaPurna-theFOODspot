@@ -132,6 +132,7 @@ export const createRequest = createServerFn({ method: "POST" })
     donation_id: z.string().uuid(),
     servings_requested: z.number().int().positive().max(1000),
     message: z.string().trim().max(500).optional().nullable(),
+    delivery_address: z.string().trim().min(1).max(500),
   }).parse(d))
   .handler(async ({ data, context }) => {
     const { error, data: row } = await context.supabase.from("food_requests")
