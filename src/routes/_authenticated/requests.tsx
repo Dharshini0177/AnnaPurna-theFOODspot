@@ -35,7 +35,13 @@ function RequestList({ items, canManage }: { items: any[]; canManage: boolean })
   const fn = useServerFn(updateRequestStatus);
   const m = useMutation({
     mutationFn: (v: { id: string; status: any }) => fn({ data: v }),
-    onSuccess: () => { toast.success("Updated"); qc.invalidateQueries({ queryKey: ["incoming-requests"] }); qc.invalidateQueries({ queryKey: ["my-requests"] }); },
+    onSuccess: () => {
+      toast.success("Updated");
+      qc.invalidateQueries({ queryKey: ["incoming-requests"] });
+      qc.invalidateQueries({ queryKey: ["my-requests"] });
+      qc.invalidateQueries({ queryKey: ["donations"] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
   });
   if (!items.length) return <p className="text-muted-foreground mt-6">No requests yet.</p>;
   const colors: Record<string, string> = { pending: "bg-accent", approved: "bg-gold text-gold-foreground", fulfilled: "bg-primary text-primary-foreground", rejected: "bg-destructive text-destructive-foreground" };
