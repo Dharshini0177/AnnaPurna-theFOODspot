@@ -157,19 +157,32 @@ export const createRequest = createServerFn({ method: "POST" })
     delivery_address: z.string().trim().min(1).max(500),
   }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: roles } = await context.supabase
-      .from("user_roles").select("role").eq("user_id", context.userId);
-    const has = (r: string) => (roles ?? []).some((x) => x.role === r);
-    if (!has("beneficiary") && !has("ngo") && !has("admin") && !has("volunteer")) {
+    try {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const { error: rErr } = await supabaseAdmin.from("user_roles")
-        .insert({ user_id: context.userId, role: "beneficiary" });
-      if (rErr && !rErr.message.includes("duplicate")) throw rErr;
+      const { data: roles } = await supabaseAdmin
+        .from("user_roles").select("role").eq("user_id", context.userId);
+      const allowed = new Set(["beneficiary", "ngo", "admin", "volunteer"]);
+      const hasAllowed = (roles ?? []).some((r) => allowed.has(r.role as string));
+      if (!hasAllowed) {
+        const { error: rErr } = await supabaseAdmin.from("user_roles")
+          .insert({ user_id: context.userId, role: "beneficiary" });
+        if (rErr && !rErr.message.includes("duplicate")) {
+          console.error("[createRequest] role grant failed", rErr);
+          throw rErr;
+        }
+      }
+      const payload = { ...data, beneficiary_id: context.userId };
+      const { error, data: row } = await context.supabase.from("food_requests")
+        .insert(payload).select().single();
+      if (error) {
+        console.error("[createRequest] insert failed", { userId: context.userId, payload, error });
+        throw error;
+      }
+      return row;
+    } catch (e) {
+      console.error("[createRequest] handler exception", e);
+      throw e;
     }
-    const { error, data: row } = await context.supabase.from("food_requests")
-      .insert({ ...data, beneficiary_id: context.userId }).select().single();
-    if (error) { console.error("[createRequest]", error); throw error; }
-    return row;
   });
 
 export const updateRequestStatus = createServerFn({ method: "POST" })
