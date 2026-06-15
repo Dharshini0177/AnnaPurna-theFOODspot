@@ -44,13 +44,29 @@ function Donations() {
 function DonationCard({ d }: { d: any }) {
   const [open, setOpen] = useState(false);
   const [servings, setServings] = useState(1);
-  const [message, setMessage] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [contactNumber, setContactNumber] = useState("");
+  const [preferredDeliveryTime, setPreferredDeliveryTime] = useState("");
+  const [notes, setNotes] = useState("");
   const reqFn = useServerFn(createRequest);
   const m = useMutation({
-    mutationFn: () => reqFn({ data: { donation_id: d.id, servings_requested: servings, message, delivery_address: deliveryAddress } }),
-    onSuccess: () => { toast.success("Request submitted"); setOpen(false); },
-    onError: (e: any) => toast.error(e.message),
+    mutationFn: () => reqFn({ data: {
+      donation_id: d.id,
+      servings_requested: servings,
+      delivery_address: deliveryAddress,
+      contact_number: contactNumber,
+      preferred_delivery_time: preferredDeliveryTime ? new Date(preferredDeliveryTime).toISOString() : null,
+      notes: notes || null,
+    } }),
+    onSuccess: () => {
+      toast.success("Request submitted");
+      setOpen(false);
+      setDeliveryAddress("");
+      setContactNumber("");
+      setPreferredDeliveryTime("");
+      setNotes("");
+    },
+    onError: (e: any) => toast.error(e?.message || "Unable to create request. Please try again."),
   });
   const statusColors: Record<string, string> = {
     available: "bg-gold text-gold-foreground", reserved: "bg-accent", in_transit: "bg-secondary",
@@ -79,8 +95,10 @@ function DonationCard({ d }: { d: any }) {
               <div className="space-y-3">
                 <div><Label>Servings needed</Label><Input type="number" min={1} value={servings} onChange={(e) => setServings(+e.target.value)} /></div>
                 <div><Label>Delivery address</Label><Textarea required maxLength={500} placeholder="Where should the food be delivered?" value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} /></div>
-                <div><Label>Message (optional)</Label><Textarea maxLength={500} value={message} onChange={(e) => setMessage(e.target.value)} /></div>
-                <Button onClick={() => m.mutate()} disabled={m.isPending || !deliveryAddress.trim()} className="w-full bg-primary text-primary-foreground">
+                <div><Label>Contact number</Label><Input required maxLength={30} inputMode="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} /></div>
+                <div><Label>Preferred delivery time (optional)</Label><Input type="datetime-local" value={preferredDeliveryTime} onChange={(e) => setPreferredDeliveryTime(e.target.value)} /></div>
+                <div><Label>Additional notes (optional)</Label><Textarea maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
+                <Button onClick={() => m.mutate()} disabled={m.isPending || !deliveryAddress.trim() || !contactNumber.trim()} className="w-full bg-primary text-primary-foreground">
                   {m.isPending ? "Submitting…" : "Submit request"}
                 </Button>
               </div>
