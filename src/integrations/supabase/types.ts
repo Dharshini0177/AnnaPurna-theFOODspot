@@ -89,33 +89,45 @@ export type Database = {
       food_requests: {
         Row: {
           beneficiary_id: string
+          contact_number: string
           created_at: string
-          delivery_address: string | null
+          delivery_address: string
           donation_id: string
           id: string
           message: string | null
+          notes: string | null
+          preferred_delivery_time: string | null
+          request_time: string
           servings_requested: number
           status: Database["public"]["Enums"]["request_status"]
           updated_at: string
         }
         Insert: {
           beneficiary_id: string
+          contact_number?: string
           created_at?: string
-          delivery_address?: string | null
+          delivery_address?: string
           donation_id: string
           id?: string
           message?: string | null
+          notes?: string | null
+          preferred_delivery_time?: string | null
+          request_time?: string
           servings_requested?: number
           status?: Database["public"]["Enums"]["request_status"]
           updated_at?: string
         }
         Update: {
           beneficiary_id?: string
+          contact_number?: string
           created_at?: string
-          delivery_address?: string | null
+          delivery_address?: string
           donation_id?: string
           id?: string
           message?: string | null
+          notes?: string | null
+          preferred_delivery_time?: string | null
+          request_time?: string
           servings_requested?: number
           status?: Database["public"]["Enums"]["request_status"]
           updated_at?: string
