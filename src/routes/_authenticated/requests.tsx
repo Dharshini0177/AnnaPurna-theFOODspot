@@ -42,6 +42,7 @@ function RequestList({ items, canManage }: { items: any[]; canManage: boolean })
       qc.invalidateQueries({ queryKey: ["donations"] });
       qc.invalidateQueries({ queryKey: ["tasks"] });
     },
+    onError: () => toast.error("Unable to update request. Please try again."),
   });
   if (!items.length) return <p className="text-muted-foreground mt-6">No requests yet.</p>;
   const colors: Record<string, string> = { pending: "bg-accent", approved: "bg-gold text-gold-foreground", fulfilled: "bg-primary text-primary-foreground", rejected: "bg-destructive text-destructive-foreground" };
@@ -52,7 +53,12 @@ function RequestList({ items, canManage }: { items: any[]; canManage: boolean })
           <div>
             <div className="font-display text-lg font-semibold">{r.donations?.food_name}</div>
             <div className="text-sm text-muted-foreground">{r.servings_requested} servings • {r.donations?.pickup_location}</div>
-            {r.message && <div className="text-sm mt-1">"{r.message}"</div>}
+            <div className="text-sm mt-2 space-y-1">
+              {r.delivery_address && <div>Delivery: {r.delivery_address}</div>}
+              {r.contact_number && <div>Contact: {r.contact_number}</div>}
+              {r.preferred_delivery_time && <div>Preferred: {new Date(r.preferred_delivery_time).toLocaleString()}</div>}
+              {(r.notes || r.message) && <div>Notes: {r.notes ?? r.message}</div>}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Badge className={colors[r.status] ?? ""}>{r.status}</Badge>
