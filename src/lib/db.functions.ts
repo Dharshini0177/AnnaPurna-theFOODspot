@@ -137,6 +137,18 @@ export const myRequests = createServerFn({ method: "GET" })
 export const incomingRequests = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: roles } = await supabaseAdmin
+      .from("user_roles").select("role").eq("user_id", context.userId);
+    const canReviewAll = (roles ?? []).some((r) => r.role === "ngo" || r.role === "admin");
+    if (canReviewAll) {
+      const { data, error } = await context.supabase.from("food_requests")
+        .select("*, donations(*)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    }
+
     const { data: myDon } = await context.supabase.from("donations")
       .select("id").eq("donor_id", context.userId);
     const ids = (myDon ?? []).map((d) => d.id);
@@ -187,7 +199,7 @@ export const createRequest = createServerFn({ method: "POST" })
           .insert({ user_id: context.userId, role: "beneficiary" });
         if (rErr && !rErr.message.includes("duplicate")) {
           console.error("[createRequest] role grant failed", rErr);
-          throw rErr;
+          throw new Error("Unable to create request. Please try again.");
         }
       }
       const payload = {
@@ -226,10 +238,19 @@ export const updateRequestStatus = createServerFn({ method: "POST" })
     status: z.enum(["pending", "approved", "rejected", "fulfilled", "cancelled"]),
   }).parse(d))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase.from("food_requests")
-      .update({ status: data.status }).eq("id", data.id);
-    if (error) throw error;
-    return { ok: true };
+    try {
+      if (!context.userId) throw new Error("Authentication required.");
+      const { error } = await context.supabase.from("food_requests")
+        .update({ status: data.status }).eq("id", data.id);
+      if (error) {
+        console.error("[updateRequestStatus] update failed", { userId: context.userId, input: data, error });
+        throw new Error("Unable to update request. Please try again.");
+      }
+      return { ok: true };
+    } catch (e) {
+      console.error("[updateRequestStatus] handler exception", e);
+      throw e;
+    }
   });
 
 // ============ TASKS ============
