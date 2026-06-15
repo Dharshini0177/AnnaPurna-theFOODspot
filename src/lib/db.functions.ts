@@ -153,11 +153,30 @@ export const createRequest = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({
     donation_id: z.string().uuid(),
     servings_requested: z.number().int().positive().max(1000),
-    message: z.string().trim().max(500).optional().nullable(),
     delivery_address: z.string().trim().min(1).max(500),
+    contact_number: z.string().trim().min(1).max(30),
+    preferred_delivery_time: z.string().datetime().optional().nullable(),
+    notes: z.string().trim().max(500).optional().nullable(),
   }).parse(d))
   .handler(async ({ data, context }) => {
     try {
+      if (!context.userId) throw new Error("Authentication required.");
+      console.log("[createRequest] validated input", { userId: context.userId, data });
+
+      const { data: donation, error: donationError } = await context.supabase
+        .from("donations")
+        .select("id,status")
+        .eq("id", data.donation_id)
+        .maybeSingle();
+      if (donationError) {
+        console.error("[createRequest] donation lookup failed", { userId: context.userId, donationId: data.donation_id, error: donationError });
+        throw new Error("Unable to create request. Please try again.");
+      }
+      if (!donation || donation.status !== "available") {
+        console.warn("[createRequest] unavailable donation", { userId: context.userId, donationId: data.donation_id, donation });
+        throw new Error("Selected donation is no longer available.");
+      }
+
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const { data: roles } = await supabaseAdmin
         .from("user_roles").select("role").eq("user_id", context.userId);
@@ -171,13 +190,28 @@ export const createRequest = createServerFn({ method: "POST" })
           throw rErr;
         }
       }
-      const payload = { ...data, beneficiary_id: context.userId };
-      const { error, data: row } = await context.supabase.from("food_requests")
+      const payload = {
+        donation_id: data.donation_id,
+        beneficiary_id: context.userId,
+        servings_requested: data.servings_requested,
+        delivery_address: data.delivery_address,
+        contact_number: data.contact_number,
+        preferred_delivery_time: data.preferred_delivery_time ?? null,
+        notes: data.notes ?? null,
+        message: data.notes ?? null,
+        request_time: new Date().toISOString(),
+        status: "pending" as const,
+      };
+      console.log("[createRequest] insert payload", { userId: context.userId, payload });
+      const response = await context.supabase.from("food_requests")
         .insert(payload).select().single();
+      const { error, data: row } = response;
+      console.log("[createRequest] Supabase response", { userId: context.userId, response });
       if (error) {
         console.error("[createRequest] insert failed", { userId: context.userId, payload, error });
-        throw error;
+        throw new Error("Unable to create request. Please try again.");
       }
+      console.log("[createRequest] inserted row", { userId: context.userId, row });
       return row;
     } catch (e) {
       console.error("[createRequest] handler exception", e);
