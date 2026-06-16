@@ -321,45 +321,21 @@ export const getArticle = createServerFn({ method: "GET" })
 // ============ ANALYTICS ============
 export const getAnalytics = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async () => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const [donations, requests, tasks, profiles, roles] = await Promise.all([
-      supabaseAdmin.from("donations").select("id,status,servings,created_at"),
-      supabaseAdmin.from("food_requests").select("id,status,servings_requested"),
-      supabaseAdmin.from("volunteer_tasks").select("id,status"),
-      supabaseAdmin.from("profiles").select("id"),
-      supabaseAdmin.from("user_roles").select("role"),
-    ]);
-    const d = donations.data ?? [];
-    const r = requests.data ?? [];
-    const t = tasks.data ?? [];
-    const totalServingsSaved = d
-      .filter((x) => x.status === "delivered")
-      .reduce((a, b) => a + (b.servings ?? 1), 0);
-    // weekly trend
-    const days: { day: string; donations: number; requests: number }[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(); date.setDate(date.getDate() - i);
-      const key = date.toISOString().slice(0, 10);
-      const label = date.toLocaleDateString("en", { weekday: "short" });
-      days.push({
-        day: label,
-        donations: d.filter((x) => x.created_at?.startsWith(key)).length,
-        requests: 0,
-      });
-    }
-    return {
-      totalDonations: d.length,
-      availableDonations: d.filter((x) => x.status === "available").length,
-      deliveredDonations: d.filter((x) => x.status === "delivered").length,
-      totalRequests: r.length,
-      approvedRequests: r.filter((x) => x.status === "approved" || x.status === "fulfilled").length,
-      totalTasks: t.length,
-      openTasks: t.filter((x) => x.status === "open").length,
-      totalUsers: (profiles.data ?? []).length,
-      volunteers: (roles.data ?? []).filter((x) => x.role === "volunteer").length,
-      ngos: (roles.data ?? []).filter((x) => x.role === "ngo").length,
-      totalServingsSaved,
-      weeklyTrend: days,
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase.rpc("get_platform_analytics");
+    if (error) throw error;
+    return data as {
+      totalDonations: number;
+      availableDonations: number;
+      deliveredDonations: number;
+      totalRequests: number;
+      approvedRequests: number;
+      totalTasks: number;
+      openTasks: number;
+      totalUsers: number;
+      volunteers: number;
+      ngos: number;
+      totalServingsSaved: number;
+      weeklyTrend: { day: string; donations: number; requests: number }[];
     };
   });
