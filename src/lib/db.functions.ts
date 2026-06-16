@@ -1,6 +1,19 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 import { z } from "zod";
+
+function createPublicServerClient() {
+  const url = process.env.SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) {
+    throw new Error("Missing Supabase environment variable(s): SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY");
+  }
+  return createClient<Database>(url, key, {
+    auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+  });
+}
 
 // ============ ROLES ============
 export const getMyRoles = createServerFn({ method: "GET" })
@@ -17,8 +30,7 @@ export const addMyRole = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z.object({ role: z.enum(["donor", "beneficiary", "volunteer", "ngo"]) }).parse(d))
   .handler(async ({ data, context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("user_roles")
+    const { error } = await context.supabase.from("user_roles")
       .insert({ user_id: context.userId, role: data.role });
     if (error && !error.message.includes("duplicate")) throw error;
     return { ok: true };
@@ -90,8 +102,7 @@ export const createDonation = createServerFn({ method: "POST" })
         .from("user_roles").select("role").eq("user_id", context.userId);
       const has = (r: string) => (roles ?? []).some((x) => x.role === r);
       if (!has("donor") && !has("ngo") && !has("admin")) {
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        const { error: rErr } = await supabaseAdmin.from("user_roles")
+        const { error: rErr } = await context.supabase.from("user_roles")
           .insert({ user_id: context.userId, role: "donor" });
         if (rErr && !rErr.message.includes("duplicate")) throw rErr;
       }
@@ -137,8 +148,7 @@ export const myRequests = createServerFn({ method: "GET" })
 export const incomingRequests = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: roles } = await supabaseAdmin
+    const { data: roles } = await context.supabase
       .from("user_roles").select("role").eq("user_id", context.userId);
     const canReviewAll = (roles ?? []).some((r) => r.role === "ngo" || r.role === "admin");
     if (canReviewAll) {
@@ -189,13 +199,12 @@ export const createRequest = createServerFn({ method: "POST" })
         throw new Error("Selected donation is no longer available.");
       }
 
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const { data: roles } = await supabaseAdmin
+      const { data: roles } = await context.supabase
         .from("user_roles").select("role").eq("user_id", context.userId);
       const allowed = new Set(["beneficiary", "ngo", "admin", "volunteer"]);
       const hasAllowed = (roles ?? []).some((r) => allowed.has(r.role as string));
       if (!hasAllowed) {
-        const { error: rErr } = await supabaseAdmin.from("user_roles")
+        const { error: rErr } = await context.supabase.from("user_roles")
           .insert({ user_id: context.userId, role: "beneficiary" });
         if (rErr && !rErr.message.includes("duplicate")) {
           console.error("[createRequest] role grant failed", rErr);
@@ -291,8 +300,8 @@ export const updateTaskStatus = createServerFn({ method: "POST" })
 // ============ ARTICLES (public via admin client) ============
 export const listArticles = createServerFn({ method: "GET" })
   .handler(async () => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin.from("nutrition_articles")
+    const supabase = createPublicServerClient();
+    const { data, error } = await supabase.from("nutrition_articles")
       .select("id,title,slug,category,excerpt,cover_image_url,created_at")
       .eq("published", true).order("created_at", { ascending: false });
     if (error) throw error;
@@ -302,8 +311,8 @@ export const listArticles = createServerFn({ method: "GET" })
 export const getArticle = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ slug: z.string().min(1).max(120) }).parse(d))
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: row, error } = await supabaseAdmin.from("nutrition_articles")
+    const supabase = createPublicServerClient();
+    const { data: row, error } = await supabase.from("nutrition_articles")
       .select("*").eq("slug", data.slug).eq("published", true).maybeSingle();
     if (error) throw error;
     return row;
@@ -312,45 +321,21 @@ export const getArticle = createServerFn({ method: "GET" })
 // ============ ANALYTICS ============
 export const getAnalytics = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async () => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const [donations, requests, tasks, profiles, roles] = await Promise.all([
-      supabaseAdmin.from("donations").select("id,status,servings,created_at"),
-      supabaseAdmin.from("food_requests").select("id,status,servings_requested"),
-      supabaseAdmin.from("volunteer_tasks").select("id,status"),
-      supabaseAdmin.from("profiles").select("id"),
-      supabaseAdmin.from("user_roles").select("role"),
-    ]);
-    const d = donations.data ?? [];
-    const r = requests.data ?? [];
-    const t = tasks.data ?? [];
-    const totalServingsSaved = d
-      .filter((x) => x.status === "delivered")
-      .reduce((a, b) => a + (b.servings ?? 1), 0);
-    // weekly trend
-    const days: { day: string; donations: number; requests: number }[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(); date.setDate(date.getDate() - i);
-      const key = date.toISOString().slice(0, 10);
-      const label = date.toLocaleDateString("en", { weekday: "short" });
-      days.push({
-        day: label,
-        donations: d.filter((x) => x.created_at?.startsWith(key)).length,
-        requests: 0,
-      });
-    }
-    return {
-      totalDonations: d.length,
-      availableDonations: d.filter((x) => x.status === "available").length,
-      deliveredDonations: d.filter((x) => x.status === "delivered").length,
-      totalRequests: r.length,
-      approvedRequests: r.filter((x) => x.status === "approved" || x.status === "fulfilled").length,
-      totalTasks: t.length,
-      openTasks: t.filter((x) => x.status === "open").length,
-      totalUsers: (profiles.data ?? []).length,
-      volunteers: (roles.data ?? []).filter((x) => x.role === "volunteer").length,
-      ngos: (roles.data ?? []).filter((x) => x.role === "ngo").length,
-      totalServingsSaved,
-      weeklyTrend: days,
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase.rpc("get_platform_analytics");
+    if (error) throw error;
+    return data as {
+      totalDonations: number;
+      availableDonations: number;
+      deliveredDonations: number;
+      totalRequests: number;
+      approvedRequests: number;
+      totalTasks: number;
+      openTasks: number;
+      totalUsers: number;
+      volunteers: number;
+      ngos: number;
+      totalServingsSaved: number;
+      weeklyTrend: { day: string; donations: number; requests: number }[];
     };
   });
