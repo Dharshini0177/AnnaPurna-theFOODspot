@@ -199,13 +199,12 @@ export const createRequest = createServerFn({ method: "POST" })
         throw new Error("Selected donation is no longer available.");
       }
 
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const { data: roles } = await supabaseAdmin
+      const { data: roles } = await context.supabase
         .from("user_roles").select("role").eq("user_id", context.userId);
       const allowed = new Set(["beneficiary", "ngo", "admin", "volunteer"]);
       const hasAllowed = (roles ?? []).some((r) => allowed.has(r.role as string));
       if (!hasAllowed) {
-        const { error: rErr } = await supabaseAdmin.from("user_roles")
+        const { error: rErr } = await context.supabase.from("user_roles")
           .insert({ user_id: context.userId, role: "beneficiary" });
         if (rErr && !rErr.message.includes("duplicate")) {
           console.error("[createRequest] role grant failed", rErr);
@@ -301,8 +300,8 @@ export const updateTaskStatus = createServerFn({ method: "POST" })
 // ============ ARTICLES (public via admin client) ============
 export const listArticles = createServerFn({ method: "GET" })
   .handler(async () => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin.from("nutrition_articles")
+    const supabase = createPublicServerClient();
+    const { data, error } = await supabase.from("nutrition_articles")
       .select("id,title,slug,category,excerpt,cover_image_url,created_at")
       .eq("published", true).order("created_at", { ascending: false });
     if (error) throw error;
@@ -312,8 +311,8 @@ export const listArticles = createServerFn({ method: "GET" })
 export const getArticle = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ slug: z.string().min(1).max(120) }).parse(d))
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: row, error } = await supabaseAdmin.from("nutrition_articles")
+    const supabase = createPublicServerClient();
+    const { data: row, error } = await supabase.from("nutrition_articles")
       .select("*").eq("slug", data.slug).eq("published", true).maybeSingle();
     if (error) throw error;
     return row;
