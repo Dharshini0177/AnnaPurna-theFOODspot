@@ -1,6 +1,19 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 import { z } from "zod";
+
+function createPublicServerClient() {
+  const url = process.env.SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) {
+    throw new Error("Missing Supabase environment variable(s): SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY");
+  }
+  return createClient<Database>(url, key, {
+    auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+  });
+}
 
 // ============ ROLES ============
 export const getMyRoles = createServerFn({ method: "GET" })
@@ -17,8 +30,7 @@ export const addMyRole = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z.object({ role: z.enum(["donor", "beneficiary", "volunteer", "ngo"]) }).parse(d))
   .handler(async ({ data, context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("user_roles")
+    const { error } = await context.supabase.from("user_roles")
       .insert({ user_id: context.userId, role: data.role });
     if (error && !error.message.includes("duplicate")) throw error;
     return { ok: true };
@@ -90,8 +102,7 @@ export const createDonation = createServerFn({ method: "POST" })
         .from("user_roles").select("role").eq("user_id", context.userId);
       const has = (r: string) => (roles ?? []).some((x) => x.role === r);
       if (!has("donor") && !has("ngo") && !has("admin")) {
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        const { error: rErr } = await supabaseAdmin.from("user_roles")
+        const { error: rErr } = await context.supabase.from("user_roles")
           .insert({ user_id: context.userId, role: "donor" });
         if (rErr && !rErr.message.includes("duplicate")) throw rErr;
       }
@@ -137,8 +148,7 @@ export const myRequests = createServerFn({ method: "GET" })
 export const incomingRequests = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: roles } = await supabaseAdmin
+    const { data: roles } = await context.supabase
       .from("user_roles").select("role").eq("user_id", context.userId);
     const canReviewAll = (roles ?? []).some((r) => r.role === "ngo" || r.role === "admin");
     if (canReviewAll) {
