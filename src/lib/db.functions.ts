@@ -273,14 +273,27 @@ export const listOpenTasks = createServerFn({ method: "GET" })
     return data ?? [];
   });
 
+async function ensureVolunteerRole(context: any) {
+  const { data: roles } = await context.supabase
+    .from("user_roles").select("role").eq("user_id", context.userId);
+  const has = (r: string) => (roles ?? []).some((x: any) => x.role === r);
+  if (!has("volunteer") && !has("ngo") && !has("admin")) {
+    const { error } = await context.supabase.from("user_roles")
+      .insert({ user_id: context.userId, role: "volunteer" });
+    if (error && !error.message.includes("duplicate")) throw error;
+  }
+}
+
 export const acceptTask = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase.from("volunteer_tasks")
+    await ensureVolunteerRole(context);
+    const { error, data: row } = await context.supabase.from("volunteer_tasks")
       .update({ volunteer_id: context.userId, status: "accepted" })
-      .eq("id", data.id).is("volunteer_id", null);
+      .eq("id", data.id).is("volunteer_id", null).select().maybeSingle();
     if (error) throw error;
+    if (!row) throw new Error("Task is no longer available.");
     return { ok: true };
   });
 
@@ -291,10 +304,38 @@ export const updateTaskStatus = createServerFn({ method: "POST" })
     status: z.enum(["open", "accepted", "picked_up", "delivered", "cancelled"]),
   }).parse(d))
   .handler(async ({ data, context }) => {
+    // Only the assigned volunteer may progress a task
+    const { data: task, error: tErr } = await context.supabase
+      .from("volunteer_tasks").select("volunteer_id").eq("id", data.id).maybeSingle();
+    if (tErr) throw tErr;
+    if (!task || task.volunteer_id !== context.userId) {
+      throw new Error("Only the assigned volunteer can update this task.");
+    }
     const { error } = await context.supabase.from("volunteer_tasks")
       .update({ status: data.status }).eq("id", data.id);
     if (error) throw error;
     return { ok: true };
+  });
+
+// Workflow view for a single donation/request — used by timeline
+export const getWorkflow = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ donation_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: donation } = await context.supabase.from("donations")
+      .select("id,status,created_at,food_name,pickup_location").eq("id", data.donation_id).maybeSingle();
+    const { data: requests } = await context.supabase.from("food_requests")
+      .select("id,status,created_at,beneficiary_id,delivery_address")
+      .eq("donation_id", data.donation_id).order("created_at", { ascending: true });
+    const reqIds = (requests ?? []).map((r) => r.id);
+    let tasks: any[] = [];
+    if (reqIds.length) {
+      const { data: t } = await context.supabase.from("volunteer_tasks")
+        .select("id,status,request_id,volunteer_id,pickup_time,delivery_time,created_at")
+        .in("request_id", reqIds);
+      tasks = t ?? [];
+    }
+    return { donation, requests: requests ?? [], tasks };
   });
 
 // ============ ARTICLES (public via admin client) ============
