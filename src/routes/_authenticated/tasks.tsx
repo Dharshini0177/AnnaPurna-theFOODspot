@@ -23,6 +23,10 @@ function Tasks() {
   const rolesFn = useServerFn(getMyRoles);
   const { data } = useQuery({ queryKey: ["tasks"], queryFn: () => fetchFn() });
   const { data: roles } = useQuery({ queryKey: ["my-roles"], queryFn: () => rolesFn() });
+  const { data: me } = useQuery({
+    queryKey: ["me-id"],
+    queryFn: async () => (await supabase.auth.getUser()).data.user?.id ?? null,
+  });
   const isPrivileged = (roles ?? []).some((r) => r === "admin" || r === "ngo");
   const canVolunteer = (roles ?? []).length === 0 || (roles ?? []).some((r) => r === "volunteer") || isPrivileged;
 
