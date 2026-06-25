@@ -238,11 +238,13 @@ export type Database = {
       volunteer_tasks: {
         Row: {
           created_at: string
+          delivery_time: string | null
           donation_id: string
           drop_location: string | null
           id: string
           notes: string | null
           pickup_location: string
+          pickup_time: string | null
           request_id: string | null
           status: Database["public"]["Enums"]["task_status"]
           updated_at: string
@@ -250,11 +252,13 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          delivery_time?: string | null
           donation_id: string
           drop_location?: string | null
           id?: string
           notes?: string | null
           pickup_location: string
+          pickup_time?: string | null
           request_id?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           updated_at?: string
@@ -262,11 +266,13 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          delivery_time?: string | null
           donation_id?: string
           drop_location?: string | null
           id?: string
           notes?: string | null
           pickup_location?: string
+          pickup_time?: string | null
           request_id?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           updated_at?: string
