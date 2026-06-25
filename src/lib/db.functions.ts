@@ -139,7 +139,7 @@ export const myRequests = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase.from("food_requests")
-      .select("*, donations(*)").eq("beneficiary_id", context.userId)
+      .select("*, donations(*), volunteer_tasks(id,status,volunteer_id,pickup_time,delivery_time)").eq("beneficiary_id", context.userId)
       .order("created_at", { ascending: false });
     if (error) throw error;
     return data ?? [];
@@ -153,7 +153,7 @@ export const incomingRequests = createServerFn({ method: "GET" })
     const canReviewAll = (roles ?? []).some((r) => r.role === "ngo" || r.role === "admin");
     if (canReviewAll) {
       const { data, error } = await context.supabase.from("food_requests")
-        .select("*, donations(*)")
+        .select("*, donations(*), volunteer_tasks(id,status,volunteer_id,pickup_time,delivery_time)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
@@ -164,7 +164,7 @@ export const incomingRequests = createServerFn({ method: "GET" })
     const ids = (myDon ?? []).map((d) => d.id);
     if (!ids.length) return [];
     const { data, error } = await context.supabase.from("food_requests")
-      .select("*, donations(*)").in("donation_id", ids)
+      .select("*, donations(*), volunteer_tasks(id,status,volunteer_id,pickup_time,delivery_time)").in("donation_id", ids)
       .order("created_at", { ascending: false });
     if (error) throw error;
     return data ?? [];
