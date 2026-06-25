@@ -69,8 +69,8 @@ function Tasks() {
       )}
       <div className="grid md:grid-cols-2 gap-4">
         {(data ?? []).map((t: any) => {
-          const mine = t.volunteer_id && roles && t.volunteer_id === (t.volunteer_id);
-          // mine flag is determined server-side via updateTaskStatus guard; for UI, show actions if open or assigned to user
+          const isAssignee = !!me && t.volunteer_id === me;
+          const isOpen = t.status === "open" && !t.volunteer_id;
           return (
           <Card key={t.id} className="p-5 shadow-soft">
             <div className="flex justify-between items-start gap-2">
@@ -83,14 +83,11 @@ function Tasks() {
               </div>
               <Badge>{t.status}</Badge>
             </div>
-            {canVolunteer && (
-              <div className="mt-4 flex gap-2 flex-wrap">
-                {t.status === "open" && <Button size="sm" onClick={() => accept.mutate(t.id)} className="bg-primary text-primary-foreground">Accept</Button>}
-                {t.status === "accepted" && <Button size="sm" onClick={() => upd.mutate({ id: t.id, status: "picked_up" })}>Mark picked up</Button>}
-                {t.status === "picked_up" && <Button size="sm" onClick={() => upd.mutate({ id: t.id, status: "delivered" })} className="bg-gold text-gold-foreground">Mark delivered</Button>}
-              </div>
-            )}
-            {mine ? null : null}
+            <div className="mt-4 flex gap-2 flex-wrap">
+              {canVolunteer && isOpen && <Button size="sm" onClick={() => accept.mutate(t.id)} className="bg-primary text-primary-foreground">Accept</Button>}
+              {isAssignee && t.status === "accepted" && <Button size="sm" onClick={() => upd.mutate({ id: t.id, status: "picked_up" })}>Mark picked up</Button>}
+              {isAssignee && t.status === "picked_up" && <Button size="sm" onClick={() => upd.mutate({ id: t.id, status: "delivered" })} className="bg-gold text-gold-foreground">Mark delivered</Button>}
+            </div>
           </Card>
         );})}
         {data && !data.length && <p className="text-muted-foreground">No open tasks right now.</p>}
